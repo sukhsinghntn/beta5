@@ -1,0 +1,170 @@
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+
+@if (IsActive)
+{
+    <div class="tour-overlay">
+        <div class="tour-backdrop" @onclick="SkipAsync"></div>
+        <div class="tour-card shadow-lg">
+            <div class="d-flex align-items-start gap-3">
+                <div class="flex-grow-1">
+                    <h5 class="mb-2">@CurrentStep?.Title</h5>
+                    <p class="mb-3">@CurrentStep?.Content</p>
+                    <div class="d-flex justify-content-between align-items-center small text-muted">
+                        <span>Step @(currentStepIndex + 1) of @Steps.Count</span>
+                        <button type="button" class="btn btn-link btn-sm text-decoration-none" @onclick="SkipAsync">Skip tour</button>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="SkipAsync"></button>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <button class="btn btn-outline-light btn-sm" @onclick="PreviousAsync" disabled="@(currentStepIndex <= 0)">Back</button>
+                <button class="btn btn-primary btn-sm" @onclick="NextAsync">@(IsLastStep ? "Finish" : "Next")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool hasRendered;
+    private int currentStepIndex = -1;
+
+    [Parameter]
+    public IReadOnlyList<TourStep> Steps { get; set; } = Array.Empty<TourStep>();
+
+    [Parameter]
+    public bool StartAutomatically { get; set; }
+
+    [Parameter]
+    public string? StorageKey { get; set; }
+
+    [Parameter]
+    public EventCallback OnCompleted { get; set; }
+
+    [Inject]
+    private IJSRuntime JS { get; set; } = default!;
+
+    private bool IsActive => currentStepIndex >= 0 && currentStepIndex < Steps.Count;
+    private bool IsLastStep => currentStepIndex >= 0 && currentStepIndex == Steps.Count - 1;
+    private TourStep? CurrentStep => IsActive ? Steps[currentStepIndex] : null;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            hasRendered = true;
+            if (StartAutomatically && Steps.Count > 0)
+            {
+                var shouldStart = true;
+                if (!string.IsNullOrWhiteSpace(StorageKey))
+                {
+                    shouldStart = await JS.InvokeAsync<bool>("tourHelper.shouldStart", StorageKey);
+                }
+
+                if (shouldStart)
+                {
+                    await StartInternalAsync();
+                }
+            }
+        }
+
+        if (IsActive)
+        {
+            await HighlightCurrentStepAsync();
+        }
+    }
+
+    public async Task StartAsync()
+    {
+        await StartInternalAsync();
+    }
+
+    private async Task StartInternalAsync()
+    {
+        if (Steps.Count == 0)
+        {
+            return;
+        }
+
+        currentStepIndex = 0;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HighlightCurrentStepAsync()
+    {
+        if (!hasRendered || !IsActive)
+        {
+            return;
+        }
+
+        var targetId = CurrentStep?.TargetId;
+        await JS.InvokeVoidAsync("tourHelper.highlight", targetId);
+    }
+
+    private async Task NextAsync()
+    {
+        if (!IsActive)
+        {
+            return;
+        }
+
+        if (IsLastStep)
+        {
+            await CompleteAsync();
+            return;
+        }
+
+        currentStepIndex++;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PreviousAsync()
+    {
+        if (!IsActive || currentStepIndex <= 0)
+        {
+            return;
+        }
+
+        currentStepIndex--;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SkipAsync()
+    {
+        await CompleteAsync();
+    }
+
+    private async Task CompleteAsync()
+    {
+        if (!IsActive)
+        {
+            return;
+        }
+
+        currentStepIndex = -1;
+        if (!string.IsNullOrWhiteSpace(StorageKey))
+        {
+            await JS.InvokeVoidAsync("tourHelper.markCompleted", StorageKey);
+        }
+
+        await JS.InvokeVoidAsync("tourHelper.clear");
+        await InvokeAsync(StateHasChanged);
+
+        if (OnCompleted.HasDelegate)
+        {
+            await OnCompleted.InvokeAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("tourHelper.clear");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The JS runtime is no longer available (for example, on navigation). Ignore.
+        }
+    }
+}

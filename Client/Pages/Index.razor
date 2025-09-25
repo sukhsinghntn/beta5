@@ -3,16 +3,21 @@
 @inject CookieHelper CookieHelper
 @inject HttpClient Http
 @using DynamicFormsApp.Shared.Models
+@using System.Collections.Generic
 
-<div class="text-center my-5">
+<div class="d-flex justify-content-end mb-3">
+    <button class="btn btn-outline-primary btn-sm" @onclick="ShowHomeTour">Take a tour</button>
+</div>
+
+<div class="text-center my-5" id="home-hero">
     <h1 class="mb-3">Dynamic Forms</h1>
     <p class="text-muted">Create, share and manage forms with ease</p>
 </div>
 
-<div class="row row-cols-1 row-cols-md-4 g-3 mb-5 justify-content-center">
+<div class="row row-cols-1 row-cols-md-4 g-3 mb-5 justify-content-center" id="home-actions-row">
     <div class="col" style="max-width:200px;">
         <a href="/NewForm" class="text-decoration-none">
-            <div class="card text-center h-100">
+            <div class="card text-center h-100" id="home-create-card">
                 <div class="card-body">
                     <span class="material-icons" style="font-size:3rem;">add_circle</span>
                     <p class="text-muted mb-0">Create Form</p>
@@ -22,7 +27,7 @@
     </div>
     <div class="col" style="max-width:200px;">
         <a href="/forms" class="text-decoration-none">
-            <div class="card text-center h-100">
+            <div class="card text-center h-100" id="home-myforms-card">
                 <div class="card-body">
                     <h3>@myForms</h3>
                     <p class="text-muted mb-0">My Forms</p>
@@ -32,7 +37,7 @@
     </div>
     <div class="col" style="max-width:200px;">
         <a href="/draftforms" class="text-decoration-none">
-            <div class="card text-center h-100">
+            <div class="card text-center h-100" id="home-drafts-card">
                 <div class="card-body">
                     <h3>@drafts</h3>
                     <p class="text-muted mb-0">Drafts</p>
@@ -42,7 +47,7 @@
     </div>
     <div class="col" style="max-width:200px;">
         <a href="/sharedforms" class="text-decoration-none">
-            <div class="card text-center h-100">
+            <div class="card text-center h-100" id="home-shared-card">
                 <div class="card-body">
                     <h3>@shared</h3>
                     <p class="text-muted mb-0">Shared With Me</p>
@@ -52,11 +57,34 @@
     </div>
 </div>
 
+<TourOverlay @ref="homeTour"
+             Steps="homeTourSteps"
+             StartAutomatically="true"
+             StorageKey="@HomeTourStorageKey" />
+
 
 @code {
+    private const string HomeTourStorageKey = "tour:home:v1";
+    private TourOverlay? homeTour;
+    private readonly IReadOnlyList<TourStep> homeTourSteps = new List<TourStep>
+    {
+        new("Welcome to Dynamic Forms", "Get a quick overview of the workspace and jump back in any time from this dashboard.", "home-hero"),
+        new("Create a form", "Start a brand-new form or continue building where you left off.", "home-create-card"),
+        new("Track your progress", "Use these tiles to reopen drafts, manage published forms, or find ones shared with you.", "home-actions-row")
+    };
+
     private int myForms;
     private int drafts;
     private int shared;
+
+    private async Task ShowHomeTour()
+    {
+        if (homeTour is not null)
+        {
+            await homeTour.StartAsync();
+        }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)

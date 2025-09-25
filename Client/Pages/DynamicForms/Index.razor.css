@@ -25,3 +25,24 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     pointer-events: none;
 }
+
+.form-builder-layout {
+    align-items: flex-start;
+}
+
+#builder-help {
+    margin-bottom: 1rem;
+}
+
+#builder-canvas > .mb-2 {
+    margin-bottom: 0.9rem;
+}
+
+#builder-canvas .section-wrapper {
+    margin-bottom: 1.5rem;
+}
+
+#builder-canvas .section-wrapper:last-child {
+    margin-bottom: 0;
+}
+
