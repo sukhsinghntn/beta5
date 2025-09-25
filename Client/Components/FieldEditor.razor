@@ -61,7 +61,7 @@
                 {
                     <div class="d-flex align-items-center mb-1">
                         <input class="form-control flex-grow-1" @bind="Field.OptionItems[index]" />
-                        <div class="btn-group btn-group-sm ms-1">
+                        <div class="btn-group-vertical btn-group-sm ms-1 option-move-buttons">
                             <button class="btn btn-outline-secondary p-1" @onclick="() => MoveOptionUp(index)"><span class="material-icons" style="font-size:16px;line-height:1">arrow_upward</span></button>
                             <button class="btn btn-outline-secondary p-1" @onclick="() => MoveOptionDown(index)"><span class="material-icons" style="font-size:16px;line-height:1">arrow_downward</span></button>
                         </div>
@@ -83,7 +83,7 @@
                     {
                         <div class="d-flex align-items-center mb-1">
                             <input class="form-control flex-grow-1" @bind="Field.GridColumns[idx]" />
-                            <div class="btn-group btn-group-sm ms-1">
+                            <div class="btn-group-vertical btn-group-sm ms-1 option-move-buttons">
                                 <button class="btn btn-outline-secondary p-1" @onclick="() => MoveColumnUp(idx)"><span class="material-icons" style="font-size:16px;line-height:1">arrow_upward</span></button>
                                 <button class="btn btn-outline-secondary p-1" @onclick="() => MoveColumnDown(idx)"><span class="material-icons" style="font-size:16px;line-height:1">arrow_downward</span></button>
                             </div>
@@ -107,7 +107,7 @@
                         {
                             <div class="d-flex align-items-center mb-1">
                                 <input class="form-control flex-grow-1" @bind="Field.GridRows[idx]" />
-                                <div class="btn-group btn-group-sm ms-1">
+                                <div class="btn-group-vertical btn-group-sm ms-1 option-move-buttons">
                                     <button class="btn btn-outline-secondary p-1" @onclick="() => MoveRowUp(idx)"><span class="material-icons" style="font-size:16px;line-height:1">arrow_upward</span></button>
                                     <button class="btn btn-outline-secondary p-1" @onclick="() => MoveRowDown(idx)"><span class="material-icons" style="font-size:16px;line-height:1">arrow_downward</span></button>
                                 </div>
@@ -127,7 +127,7 @@
                         {
                             <div class="d-flex align-items-center mb-1">
                                 <input class="form-control flex-grow-1" @bind="Field.GridColumns[idx]" />
-                                <div class="btn-group btn-group-sm ms-1">
+                                <div class="btn-group-vertical btn-group-sm ms-1 option-move-buttons">
                                     <button class="btn btn-outline-secondary p-1" @onclick="() => MoveColumnUp(idx)"><span class="material-icons" style="font-size:16px;line-height:1">arrow_upward</span></button>
                                     <button class="btn btn-outline-secondary p-1" @onclick="() => MoveColumnDown(idx)"><span class="material-icons" style="font-size:16px;line-height:1">arrow_downward</span></button>
                                 </div>
