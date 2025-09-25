@@ -1,0 +1,26 @@
+@using DynamicFormsApp.Shared.Models
+@inherits LayoutComponentBase
+
+<div class="card border-warning mb-3">
+    <div class="card-header bg-warning text-dark">
+        @Info.Message
+    </div>
+    <div class="card-body">
+        <h5 class="card-title">@Info.FormName</h5>
+        @if (!string.IsNullOrWhiteSpace(Info.FormDescription))
+        {
+            <p class="card-text">@Info.FormDescription</p>
+        }
+        <p class="mb-0">Owner: @Info.Owner
+            @if (!string.IsNullOrEmpty(Info.Email))
+            {
+                <span>(@Info.Email)</span>
+            }
+        </p>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public DeletedFormInfo Info { get; set; } = default!;
+}

@@ -1,0 +1,51 @@
+<RadzenCard Style="width:100%;max-width:400px">
+    <RadzenStack Gap="0.75rem">
+        <div>
+            <RadzenLabel Text="Label" />
+            <RadzenTextBox @bind-Value="label" Style="width:100%" />
+        </div>
+        <div>
+            <RadzenLabel Text="Icon" />
+            <RadzenDropDown Data="iconOptions" @bind-Value="selectedIcon" Style="width:100%">
+                <Template Context="icon">
+                    <span style="font-size:1.25rem">@icon</span>
+                </Template>
+            </RadzenDropDown>
+        </div>
+        <div class="d-flex justify-content-end">
+            <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Secondary" class="me-2" Click="@(() => DialogService.Close(null))" />
+            <RadzenButton Text="Save" ButtonStyle="ButtonStyle.Primary" Click="Save" />
+        </div>
+    </RadzenStack>
+</RadzenCard>
+
+@code {
+    [Parameter] public IEnumerable<string>? Icons { get; set; }
+
+    private List<string> iconOptions = new() { "🏷️", "✅", "⏳", "❌", "⭐", "⚠️", "📌" };
+    private string label = string.Empty;
+    private string selectedIcon = "🏷️";
+
+    protected override void OnInitialized()
+    {
+        if (Icons != null)
+        {
+            iconOptions = Icons.ToList();
+        }
+        if (iconOptions.Count > 0)
+        {
+            selectedIcon = iconOptions[0];
+        }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            await DialogService.Alert("Label name is required.", "Add Label");
+            return;
+        }
+        var result = new StatusLabel { Label = label.Trim(), Icon = selectedIcon };
+        DialogService.Close(result);
+    }
+}

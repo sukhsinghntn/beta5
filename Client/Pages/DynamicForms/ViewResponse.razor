@@ -1,0 +1,638 @@
+@page "/forms/{FormId:int}/responses/{ResponseId:int}"
+@using System.Net.Http.Json
+@using System.Net
+@using System.Text.Json
+@using System.Linq
+@using System.Text
+@using System.Collections.Generic
+@using DynamicFormsApp.Shared.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject CookieHelper CookieHelper
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <div>
+        <h3 class="mb-0">Response for @form?.Name</h3>
+        @if (!string.IsNullOrEmpty(responderName))
+        {
+            <span class="text-muted">Submitted by @responderName</span>
+        }
+    </div>
+
+</div>
+<div class="mb-3">
+    <label class="form-label">Status</label>
+    <select class="form-select w-auto" value="@status" @onchange="OnStatusChanged">
+        <option value="">No Label</option>
+        @foreach (var opt in statusOptions)
+        {
+            <option value="@opt">@statusIcons.GetValueOrDefault(opt, "🏷️") @opt</option>
+        }
+        <option value="__custom">+ Add label...</option>
+    </select>
+</div>
+@if (unavailableInfo != null)
+{
+    <FormUnavailableDisplay Info="@unavailableInfo" />
+}
+else if (!string.IsNullOrEmpty(deletedMessage))
+{
+    <div class="alert alert-warning">@deletedMessage</div>
+}
+<p class="text-muted">@form?.Description</p>
+<div class="mb-3" role="group">
+    <button class="btn btn-outline-info me-2" @onclick="PrintResponse">Print</button>
+    <button class="btn btn-outline-info me-2" @onclick="DownloadPdf">Download PDF</button>
+    <button class="btn btn-outline-info me-2" @onclick="DownloadCsv">Download CSV</button>
+    <button class="btn btn-outline-info" @onclick="DownloadExcel">Download Excel</button>
+</div>
+@if (responseIds != null && responseIds.Count > 0)
+{
+    <div class="mb-3">
+        @if (PrevId.HasValue)
+        {
+            <a class="btn btn-outline-secondary me-2" href="@($"/forms/{FormId}/responses/{PrevId.Value}")">&laquo; Prev</a>
+        }
+        @foreach (var id in DisplayIds)
+        {
+            if (id == ResponseId)
+            {
+                <span class="btn btn-primary me-1">@id</span>
+            }
+            else
+            {
+                <a class="btn btn-outline-secondary me-1" href="@($"/forms/{FormId}/responses/{id}")">@id</a>
+            }
+        }
+        @if (NextId.HasValue)
+        {
+            <a class="btn btn-outline-secondary" href="@($"/forms/{FormId}/responses/{NextId.Value}")">Next &raquo;</a>
+        }
+    </div>
+}
+
+@if (form == null || response == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div id="printArea">
+    @foreach (var rowGroup in form.Fields.OrderBy(f => f.Row ?? 0).ThenBy(f => f.Column ?? 0).GroupBy(f => f.Row ?? 0))
+    {
+        <div class="row g-3 mb-3">
+        @foreach (var fld in rowGroup)
+        {
+            if (fld.FieldType == "section")
+            {
+                <div class="col-12">
+                    <hr />
+                    @if (!string.IsNullOrWhiteSpace(fld.Label))
+                    {
+                        <h5>@fld.Label</h5>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(GetInstructions(fld)))
+                    {
+                        <p class="text-muted">@GetInstructions(fld)</p>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="col-12 col-md-@(12 / (rowGroup.Count() == 0 ? 1 : rowGroup.Count()))">
+                    <div class="mb-3">
+                        @if (fld.FieldType != "image" && fld.FieldType != "statictext")
+                        {
+                            <label class="form-label fw-semibold">@fld.Label</label>
+                        }
+                        <div class="form-control-plaintext border rounded bg-light p-2" style="color:black">
+                            @DisplayValue(fld)
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+        </div>
+    }
+    </div>
+    <table id="exportTable" class="table d-none">
+        <thead>
+            <tr><th>Field</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+        @foreach (var fld in form.Fields.OrderBy(f => f.Row ?? 0).ThenBy(f => f.Column ?? 0)
+            .Where(f => f.FieldType != "image" && f.FieldType != "statictext"))
+        {
+            <tr>
+                <th>@fld.Label</th>
+                <td>@ValueAsString(fld)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public int FormId { get; set; }
+    [Parameter] public int ResponseId { get; set; }
+
+    private Form? form;
+    private Dictionary<string, object>? response;
+    private List<int>? responseIds;
+    private string? responderName;
+    private IJSObjectReference? exportModule;
+    private string? deletedMessage;
+    private DeletedFormInfo? unavailableInfo;
+    private string status = string.Empty;
+    private List<string> statusOptions = new() { "Approved", "Pending", "Rejected" };
+    private Dictionary<string, string> statusIcons = new()
+    {
+        ["Approved"] = "✅",
+        ["Pending"] = "⏳",
+        ["Rejected"] = "❌"
+    };
+    private List<string> iconChoices = new() { "🏷️", "✅", "⏳", "❌", "⭐", "⚠️", "📌" };
+
+    int? PrevId =>
+        responseIds != null && responseIds.IndexOf(ResponseId) > 0
+            ? responseIds[responseIds.IndexOf(ResponseId) - 1]
+            : null;
+
+    int? NextId =>
+        responseIds != null && responseIds.IndexOf(ResponseId) >= 0 && responseIds.IndexOf(ResponseId) < responseIds.Count - 1
+            ? responseIds[responseIds.IndexOf(ResponseId) + 1]
+            : null;
+
+    IEnumerable<int> DisplayIds
+    {
+        get
+        {
+            if (responseIds == null || responseIds.Count == 0)
+                return Array.Empty<int>();
+            var index = responseIds.IndexOf(ResponseId);
+            if (index < 0) index = 0;
+            var start = Math.Max(0, index - 2);
+            if (start + 5 > responseIds.Count)
+                start = Math.Max(0, responseIds.Count - 5);
+            return responseIds.Skip(start).Take(5);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = await CookieHelper.LoginStatus();
+        if (string.IsNullOrEmpty(user))
+        {
+            var ret = Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri));
+            Navigation.NavigateTo($"login?returnUrl={ret}", true);
+            return;
+        }
+
+        var respForm = await Http.GetAsync($"api/forms/{FormId}");
+        if (!respForm.IsSuccessStatusCode)
+        {
+            if (respForm.StatusCode == HttpStatusCode.Gone)
+            {
+                unavailableInfo = await respForm.Content.ReadFromJsonAsync<DeletedFormInfo>();
+            }
+            else
+            {
+                deletedMessage = "Form not found.";
+            }
+            form = null;
+            response = null;
+            responseIds = null;
+            return;
+        }
+
+        form = await respForm.Content.ReadFromJsonAsync<Form>();
+        responseIds = await Http.GetFromJsonAsync<List<int>>($"api/forms/{FormId}/responseIds");
+
+        var resp = await Http.GetAsync($"api/forms/{FormId}/responses/{ResponseId}");
+        if (!resp.IsSuccessStatusCode)
+        {
+            deletedMessage = "Response not found.";
+            response = null;
+            return;
+        }
+        response = await resp.Content.ReadFromJsonAsync<Dictionary<string, object>>();
+        if (response.TryGetValue("ResponderName", out var respName))
+        {
+            responderName = respName?.ToString();
+        }
+        if (response.TryGetValue("Status", out var st))
+        {
+            status = st?.ToString() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(status) && !statusOptions.Contains(status))
+            {
+                statusOptions.Add(status);
+            }
+        }
+
+        var savedIcons = await JS.InvokeAsync<string>("localStorage.getItem", $"form_{FormId}_statusIcons");
+        if (!string.IsNullOrWhiteSpace(savedIcons))
+        {
+            var stored = JsonSerializer.Deserialize<Dictionary<string, string>>(savedIcons) ?? new();
+            foreach (var kv in stored)
+            {
+                statusIcons[kv.Key] = kv.Value;
+                if (!statusOptions.Contains(kv.Key)) statusOptions.Add(kv.Key);
+            }
+        }
+
+        if (exportModule == null)
+        {
+            exportModule = await JS.InvokeAsync<IJSObjectReference>("import", "/js/exportHelper.js");
+        }
+    }
+
+    async Task OnStatusChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (value == "__custom")
+        {
+            var result = await DialogService.OpenAsync<StatusLabelDialog>("Add Label",
+                new Dictionary<string, object> { { "Icons", iconChoices } });
+            if (result is StatusLabel custom && !string.IsNullOrWhiteSpace(custom.Label))
+            {
+                if (!statusOptions.Contains(custom.Label)) statusOptions.Add(custom.Label);
+                statusIcons[custom.Label] = custom.Icon;
+                await JS.InvokeVoidAsync("localStorage.setItem", $"form_{FormId}_statusIcons", JsonSerializer.Serialize(statusIcons));
+                status = custom.Label;
+                await Http.PutAsJsonAsync($"api/forms/{FormId}/responses/{ResponseId}/status", new { Status = status });
+            }
+        }
+        else
+        {
+            status = value ?? string.Empty;
+            await Http.PutAsJsonAsync($"api/forms/{FormId}/responses/{ResponseId}/status", new { Status = status });
+        }
+    }
+
+    RenderFragment DisplayValue(FormField field) => builder =>
+    {
+        if (response == null) return;
+        response.TryGetValue(field.Key, out var valObj);
+        var val = valObj?.ToString() ?? string.Empty;
+        if (field.FieldType == "file")
+        {
+            if (string.IsNullOrWhiteSpace(val))
+            {
+                builder.AddContent(0, "No file");
+                return;
+            }
+            if (val.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.AddMarkupContent(1, $"<iframe src='/{val}' width='100%' height='200px' style='border:none;'></iframe>");
+            }
+            else if (IsImage(val))
+            {
+                builder.AddMarkupContent(2, $"<img src='/{val}' class='img-thumbnail' style='max-height:120px;' />");
+            }
+            else
+            {
+                builder.OpenElement(3, "a");
+                builder.AddAttribute(4, "href", $"/{val}");
+                builder.AddAttribute(5, "target", "_blank");
+                builder.AddContent(6, "Open File");
+                builder.CloseElement();
+            }
+        }
+        else if (field.FieldType == "image")
+        {
+            if (!string.IsNullOrWhiteSpace(field.ImageUrl))
+            {
+                var style = $"max-width:100%;{(field.ImageWidth.HasValue ? $"width:{field.ImageWidth}px;" : string.Empty)}{(field.ImageHeight.HasValue ? $"height:{field.ImageHeight}px;" : string.Empty)}";
+                builder.AddMarkupContent(10, $"<img src='/{field.ImageUrl}' style='{style}' />");
+            }
+        }
+        else if (field.FieldType == "statictext")
+        {
+            builder.AddContent(11, field.Label);
+        }
+        else if (field.FieldType == "checkbox")
+        {
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    var list = JsonSerializer.Deserialize<List<string>>(val) ?? new();
+                    builder.AddContent(7, string.Join(", ", list));
+                }
+                catch
+                {
+                    builder.AddContent(8, val);
+                }
+            }
+        }
+        else if (field.FieldType == "grid_text")
+        {
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    var rows = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(val) ?? new();
+                    var opts = JsonSerializer.Deserialize<GridOptions>(field.OptionsJson ?? "{}");
+                    var cols = opts?.Columns ?? new List<string>();
+                    var sb = new StringBuilder("<table class='table table-bordered table-sm mb-0'><thead><tr>");
+                    foreach (var c in cols)
+                    {
+                        sb.Append($"<th>{WebUtility.HtmlEncode(c)}</th>");
+                    }
+                    sb.Append("</tr></thead><tbody>");
+                    foreach (var row in rows)
+                    {
+                        sb.Append("<tr>");
+                        foreach (var c in cols)
+                        {
+                            row.TryGetValue(c, out var cell);
+                            sb.Append($"<td>{WebUtility.HtmlEncode(cell)}</td>");
+                        }
+                        sb.Append("</tr>");
+                    }
+                    sb.Append("</tbody></table>");
+                    builder.AddMarkupContent(12, sb.ToString());
+                }
+                catch
+                {
+                    builder.AddContent(13, val);
+                }
+            }
+        }
+        else if (field.FieldType == "grid_radio")
+        {
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    var selections = JsonSerializer.Deserialize<Dictionary<string, string>>(val) ?? new();
+                    var opts = JsonSerializer.Deserialize<GridOptions>(field.OptionsJson ?? "{}");
+                    var rows = opts?.Rows ?? new List<string>();
+                    var cols = opts?.Columns ?? new List<string>();
+                    var sb = new StringBuilder("<table class='table table-bordered table-sm mb-0'><thead><tr><th></th>");
+                    foreach (var c in cols)
+                        sb.Append($"<th>{WebUtility.HtmlEncode(c)}</th>");
+                    sb.Append("</tr></thead><tbody>");
+                    foreach (var r in rows)
+                    {
+                        sb.Append("<tr>");
+                        sb.Append($"<td><strong>{WebUtility.HtmlEncode(r)}</strong></td>");
+                        foreach (var c in cols)
+                        {
+                            var mark = selections.TryGetValue(r, out var sel) && sel == c ? "&#10003;" : string.Empty;
+                            sb.Append($"<td>{mark}</td>");
+                        }
+                        sb.Append("</tr>");
+                    }
+                    sb.Append("</tbody></table>");
+                    builder.AddMarkupContent(14, sb.ToString());
+                }
+                catch
+                {
+                    builder.AddContent(15, val);
+                }
+            }
+        }
+        else if (field.FieldType == "grid_checkbox")
+        {
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    var selections = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(val) ?? new();
+                    var opts = JsonSerializer.Deserialize<GridOptions>(field.OptionsJson ?? "{}");
+                    var rows = opts?.Rows ?? new List<string>();
+                    var cols = opts?.Columns ?? new List<string>();
+                    var sb = new StringBuilder("<table class='table table-bordered table-sm mb-0'><thead><tr><th></th>");
+                    foreach (var c in cols)
+                        sb.Append($"<th>{WebUtility.HtmlEncode(c)}</th>");
+                    sb.Append("</tr></thead><tbody>");
+                    foreach (var r in rows)
+                    {
+                        sb.Append("<tr>");
+                        sb.Append($"<td><strong>{WebUtility.HtmlEncode(r)}</strong></td>");
+                        foreach (var c in cols)
+                        {
+                            var mark = selections.TryGetValue(r, out var list) && list.Contains(c) ? "&#10003;" : string.Empty;
+                            sb.Append($"<td>{mark}</td>");
+                        }
+                        sb.Append("</tr>");
+                    }
+                    sb.Append("</tbody></table>");
+                    builder.AddMarkupContent(16, sb.ToString());
+                }
+                catch
+                {
+                    builder.AddContent(17, val);
+                }
+            }
+        }
+        else if (field.FieldType == "date")
+        {
+            if (DateTime.TryParse(val, out var dt))
+                builder.AddContent(9, dt.ToString("MM/dd/yyyy"));
+            else
+                builder.AddContent(9, val);
+        }
+        else if (field.FieldType == "datetime")
+        {
+            if (DateTime.TryParse(val, out var dt))
+                builder.AddContent(9, dt.ToString("MM/dd/yyyy h:mm tt"));
+            else
+                builder.AddContent(9, val);
+        }
+        else
+        {
+            builder.AddContent(9, FormatValue(valObj));
+        }
+    };
+
+    string? GetInstructions(FormField field)
+    {
+        if (string.IsNullOrWhiteSpace(field.OptionsJson))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(field.OptionsJson);
+            if (doc.RootElement.TryGetProperty("Instructions", out var instEl))
+                return instEl.GetString();
+        }
+        catch
+        {
+        }
+        return null;
+    }
+
+    bool IsImage(string path)
+    {
+        var lower = path.ToLowerInvariant();
+        return lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") ||
+               lower.EndsWith(".png") || lower.EndsWith(".gif") ||
+               lower.EndsWith(".bmp") || lower.EndsWith(".webp");
+    }
+
+    string FormatValue(object? val)
+    {
+        if (val is JsonElement je)
+        {
+            if (je.ValueKind == JsonValueKind.Array)
+            {
+                return string.Join(", ", je.EnumerateArray().Select(e => e.ToString()));
+            }
+            if (je.ValueKind == JsonValueKind.Object)
+            {
+                return je.GetRawText();
+            }
+            return je.ToString();
+        }
+        return val?.ToString() ?? string.Empty;
+    }
+
+    string ValueAsString(FormField field)
+    {
+        if (response == null) return string.Empty;
+        response.TryGetValue(field.Key, out var valObj);
+        var val = valObj?.ToString() ?? string.Empty;
+        if (field.FieldType == "checkbox")
+        {
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    var list = JsonSerializer.Deserialize<List<string>>(val) ?? new();
+                    return string.Join(", ", list);
+                }
+                catch
+                {
+                }
+            }
+            return val;
+        }
+        if (field.FieldType == "grid_text")
+        {
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    var rows = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(val) ?? new();
+                    return string.Join(" | ", rows.Select(r => string.Join(", ", r.Select(kv => $"{kv.Key}:{kv.Value}"))));
+                }
+                catch
+                {
+                }
+            }
+            return val;
+        }
+        if (field.FieldType == "grid_radio")
+        {
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(val) ?? new();
+                    return string.Join(" | ", dict.Select(kv => $"{kv.Key}:{kv.Value}"));
+                }
+                catch { }
+            }
+            return val;
+        }
+        if (field.FieldType == "grid_checkbox")
+        {
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                try
+                {
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(val) ?? new();
+                    return string.Join(" | ", dict.Select(kv => $"{kv.Key}:{string.Join(", ", kv.Value)}"));
+                }
+                catch { }
+            }
+            return val;
+        }
+        if (field.FieldType == "image" || field.FieldType == "statictext")
+        {
+            return string.Empty;
+        }
+
+        if (field.FieldType == "date")
+        {
+            if (DateTime.TryParse(val, out var dt))
+                return dt.ToString("MM/dd/yyyy");
+            return val;
+        }
+
+        if (field.FieldType == "datetime")
+        {
+            if (DateTime.TryParse(val, out var dt))
+                return dt.ToString("MM/dd/yyyy h:mm tt");
+            return val;
+        }
+
+        return FormatValue(valObj);
+    }
+
+    private class GridOptions
+    {
+        public List<string>? Rows { get; set; }
+        public List<string>? Columns { get; set; }
+    }
+
+    private async Task DownloadCsv()
+    {
+        if (exportModule is not null)
+        {
+            await exportModule.InvokeVoidAsync("downloadTableCsv", "exportTable", $"{form?.Name ?? "response"}.csv");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("downloadTableCsv", "exportTable", $"{form?.Name ?? "response"}.csv");
+        }
+    }
+
+    private async Task DownloadPdf()
+    {
+        if (exportModule is not null)
+        {
+            await exportModule.InvokeVoidAsync("exportTableToPdf", "printArea", $"{form?.Name ?? "response"}.pdf");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("exportTableToPdf", "printArea", $"{form?.Name ?? "response"}.pdf");
+        }
+    }
+
+    private async Task DownloadExcel()
+    {
+        if (exportModule is not null)
+        {
+            await exportModule.InvokeVoidAsync("exportTableToExcel", "exportTable", $"{form?.Name ?? "response"}.xlsx");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("exportTableToExcel", "exportTable", $"{form?.Name ?? "response"}.xlsx");
+        }
+    }
+
+    private async Task PrintResponse()
+    {
+        if (exportModule is not null)
+        {
+            await exportModule.InvokeVoidAsync("printElement", "printArea");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("printElement", "printArea");
+        }
+    }
+
+
+    public async ValueTask DisposeAsync()
+    {
+        if (exportModule is not null)
+        {
+            await exportModule.DisposeAsync();
+        }
+    }
+}

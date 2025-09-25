@@ -1,0 +1,16 @@
+C:\Users\ssingh\Desktop\DynamicFormsApp\DynamicFormsApp\bug-login\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\DynamicFormsApp\bug-login\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\deleting\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\deleting\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\deleting\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\deleting\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\deleting\Email\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\deleting\Email\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\Adming\deleting\Email\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\Adming\deleting\Email\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\Adming\deleting\EmailSearch\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\Adming\deleting\EmailSearch\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\Adming\beta1\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\Adming\beta1\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\Adming\beta1\Client\obj\Release\net8.0\staticwebassets.build.json
+C:\Users\ssingh\Desktop\DynamicFormsApp\Adming\beta1\Client\obj\Release\net8.0\staticwebassets.build.json

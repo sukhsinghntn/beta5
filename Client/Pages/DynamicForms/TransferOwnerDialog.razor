@@ -1,0 +1,62 @@
+@inject HttpClient Http
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject IUserService UserService
+@using System.Net.Http.Json
+@using DynamicFormsApp.Shared.Models
+
+<RadzenCard Style="width:100%;max-width:500px">
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center" Gap="0.5rem" class="mb-3">
+        <RadzenLabel Text="New Owner" Component="UserDropDown" />
+        <RadzenDropDown Name="UserDropDown"
+                        Data="@users" TItem="UserModel"
+                        TextProperty="DisplayName" ValueProperty="UserName"
+                        AllowFiltering="true" AllowClear="true"
+                        LoadData="@LoadUsers"
+                        @bind-Value="selectedUser"
+                        Style="width:100%; max-width:400px;" Placeholder="Search user..." />
+    </RadzenStack>
+    <div class="d-flex justify-content-end">
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Secondary" Click="@Cancel" class="me-2" />
+        <RadzenButton Text="Transfer" ButtonStyle="ButtonStyle.Primary" Click="@Transfer" />
+    </div>
+</RadzenCard>
+
+@code {
+    [Parameter] public int FormId { get; set; }
+
+    private List<UserModel>? users;
+    private string? selectedUser;
+
+    protected override void OnInitialized()
+    {
+        users = new List<UserModel>();
+    }
+
+    private async Task Transfer()
+    {
+        if (string.IsNullOrWhiteSpace(selectedUser))
+        {
+            await DialogService.Alert("Please select a user.", "Transfer Form");
+            return;
+        }
+
+        var dto = new ChangeOwnerDto { NewOwner = selectedUser };
+        await Http.PostAsJsonAsync($"api/forms/{FormId}/owner", dto);
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Success,
+            Summary = "Owner Changed",
+            Detail = selectedUser
+        });
+        DialogService.Close(true);
+    }
+
+    void Cancel() => DialogService.Close(false);
+
+    private async Task LoadUsers(LoadDataArgs args)
+    {
+        var term = args.Filter ?? string.Empty;
+        users = await UserService.SearchUsers(term);
+    }
+}

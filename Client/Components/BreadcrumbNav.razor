@@ -1,0 +1,81 @@
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@using Microsoft.AspNetCore.Components.Routing
+@using System.Globalization
+@using DynamicFormsApp.Shared.Models
+@implements IDisposable
+@code {
+    private List<(string Label, string Path)> items = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await BuildAsync();
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await BuildAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    void IDisposable.Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private async Task BuildAsync()
+    {
+        items.Clear();
+        var rel = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (string.IsNullOrWhiteSpace(rel)) return;
+        rel = rel.Split('?',2)[0];
+        var segs = rel.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var path = string.Empty;
+        string? prev = null;
+        foreach (var seg in segs)
+        {
+            path += "/" + seg;
+            var label = await FormatAsync(seg, prev);
+            items.Add((label, path));
+            prev = seg;
+        }
+    }
+
+    private async Task<string> FormatAsync(string seg, string? prev)
+    {
+        seg = seg.Split('?',2)[0];
+        if (int.TryParse(seg, out var id) && string.Equals(prev, "forms", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var form = await Http.GetFromJsonAsync<Form>($"api/forms/{id}");
+                if (!string.IsNullOrWhiteSpace(form?.Name))
+                    return form.Name;
+            }
+            catch { }
+            return seg;
+        }
+        if (int.TryParse(seg, out _)) return seg;
+        var text = seg.Replace('-', ' ');
+        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(text);
+    }
+}
+
+<nav aria-label="breadcrumb" class="rz-pl-2 rz-pr-2">
+    <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item"><a href="/">Home</a></li>
+        @for (int i = 0; i < items.Count; i++)
+        {
+            var itm = items[i];
+            if (i == items.Count - 1)
+            {
+                <li class="breadcrumb-item active" aria-current="page">@itm.Label</li>
+            }
+            else
+            {
+                <li class="breadcrumb-item"><a href="@itm.Path">@itm.Label</a></li>
+            }
+        }
+    </ol>
+</nav>

@@ -1,0 +1,27 @@
+.preview-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    overflow: auto;
+    background-color: #fff;
+    z-index: 1050;
+}
+
+.draggable-field {
+    position: relative;
+}
+
+.toolbox-preview {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 4px;
+    z-index: 9999;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    pointer-events: none;
+}

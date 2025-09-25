@@ -1,0 +1,713 @@
+﻿@page "/forms/{FormId:int}"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Text.Json
+@using System.Linq
+@using DynamicFormsApp.Shared.Models
+@using System.Net
+@using System.Collections.Generic
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject CookieHelper CookieHelper
+@inject IUserService UserService
+
+<h3>@(!string.IsNullOrEmpty(statusMessage) || unavailableInfo != null
+        ? "Form Not Available"
+        : form?.Name ?? "Loading…")</h3>
+<p class="text-muted">@form?.Description</p>
+@if (unavailableInfo != null)
+{
+    <FormUnavailableDisplay Info="@unavailableInfo" />
+}
+else if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="alert alert-warning">@statusMessage</div>
+}
+else if (form == null)
+{
+    <p><em>Loading form…</em></p>
+}
+else
+{
+    <EditForm Model="@responseData">
+        @{
+            var groups = form.Fields
+                .OrderBy(f => f.Row ?? 0)
+                .ThenBy(f => f.Column ?? 0)
+                .GroupBy(f => f.Row ?? 0);
+        }
+
+        @foreach (var rowGroup in groups)
+        {
+            <div class="row g-3 mb-3">
+            @foreach (var fld in rowGroup)
+            {
+                <div class="col-12 col-md-@(12 / (rowGroup.Count() == 0 ? 1 : rowGroup.Count()))">
+                    <div class="mb-3">
+                        @if (fld.FieldType != "title" && fld.FieldType != "section" && fld.FieldType != "image" && fld.FieldType != "statictext")
+                        {
+                            <label class="form-label fw-semibold">
+                                @fld.Label
+                                @if (fld.IsRequired)
+                                {
+                                    <span class="text-danger"> *</span>
+                                }
+                            </label>
+                        }
+
+                @switch (fld.FieldType)
+                {
+                    case "text":
+                        <input type="text" class="form-control"
+                               placeholder="@fld.Placeholder"
+                               value="@GetString(fld.Key)"
+                               maxlength="@fld.CharLimit"
+                               minlength="@fld.MinCharLimit"
+                               @onchange="e => OnTextChanged(fld.Key, e)" />
+                        break;
+
+                    case "textarea":
+                        <textarea class="form-control" placeholder="@fld.Placeholder" maxlength="@fld.CharLimit" minlength="@fld.MinCharLimit"
+                                  @onchange="e => OnTextChanged(fld.Key, e)">@GetString(fld.Key)</textarea>
+                        break;
+
+                    case "number":
+                        <input type="number" class="form-control"
+                               value="@GetNumberString(fld.Key)"
+                               @onchange="e => OnNumberChanged(fld.Key, e)" />
+                        break;
+
+                    case "date":
+                        <input type="date" class="form-control"
+                               value="@GetDateString(fld.Key)"
+                               @onchange="e => OnDateChanged(fld.Key, e)" />
+                        break;
+
+                    case "time":
+                        <input type="time" class="form-control"
+                               value="@GetTimeString(fld.Key)"
+                               @onchange="e => OnTimeChanged(fld.Key, e)" />
+                        break;
+
+                    case "datetime":
+                        <input type="datetime-local" class="form-control"
+                               value="@GetDateTimeString(fld.Key)"
+                               @onchange="e => OnDateTimeChanged(fld.Key, e)" />
+                        break;
+
+                    case "dropdown":
+                        var ddOptions = JsonSerializer.Deserialize<List<string>>(fld.OptionsJson ?? "[]");
+                        <select class="form-select" value="@GetString(fld.Key)" @onchange="e => OnTextChanged(fld.Key, e)">
+                            <option value="" disabled selected>@(string.IsNullOrWhiteSpace(fld.Placeholder) ? "Select one from dropdown" : fld.Placeholder)</option>
+                            @foreach (var opt in ddOptions)
+                            {
+                                <option value="@opt">@opt</option>
+                            }
+                        </select>
+                        break;
+
+                    case "user":
+                        <select class="form-select" value="@GetString(fld.Key)" @onchange="e => OnTextChanged(fld.Key, e)">
+                            <option value="" disabled selected>Select user...</option>
+                            @foreach (var u in directoryUsers)
+                            {
+                                <option value="@u.DisplayName">@FormatUserOption(u)</option>
+                            }
+                        </select>
+                        break;
+                    case "department":
+                        <select class="form-select" value="@GetString(fld.Key)" @onchange="e => OnTextChanged(fld.Key, e)">
+                            <option value="" disabled selected>Select department...</option>
+                            @foreach (var d in departments)
+                            {
+                                <option value="@d">@d</option>
+                            }
+                        </select>
+                        break;
+                    case "location":
+                        <select class="form-select" value="@GetString(fld.Key)" @onchange="e => OnTextChanged(fld.Key, e)">
+                            <option value="" disabled selected>Select location...</option>
+                            @foreach (var l in locations)
+                            {
+                                <option value="@l">@l</option>
+                            }
+                        </select>
+                        break;
+
+                    case "radio":
+                        var radioOptions = JsonSerializer.Deserialize<List<string>>(fld.OptionsJson ?? "[]");
+                        foreach (var opt in radioOptions)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio"
+                                       name="@fld.Key" value="@opt"
+                                       @onchange="e => OnTextChanged(fld.Key, e)" />
+                                <label class="form-check-label">@opt</label>
+                            </div>
+                        }
+                        break;
+
+                    case "checkbox":
+                        var chkOptions = JsonSerializer.Deserialize<List<string>>(fld.OptionsJson ?? "[]");
+                        foreach (var opt in chkOptions)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       @onchange="e => OnCheckboxChanged(fld.Key, opt, e)" />
+                                <label class="form-check-label">@opt</label>
+                            </div>
+                        }
+                        break;
+
+                    case "grid_radio":
+                    case "grid_checkbox":
+                        var gridOpts = JsonSerializer.Deserialize<GridOptions>(fld.OptionsJson ?? "{}");
+                        var gridRows = gridOpts?.Rows ?? new List<string>();
+                        var gridCols = gridOpts?.Columns ?? new List<string>();
+                        <table class="table table-bordered table-sm">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    @foreach (var col in gridCols)
+                                    {
+                                        <th>@col</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in gridRows)
+                                {
+                                    <tr>
+                                        <td><strong>@row</strong></td>
+                                        @foreach (var col in gridCols)
+                                        {
+                                            <td>
+                                                @if (fld.FieldType == "grid_radio")
+                                                {
+                                                    <input type="radio" name="@($"grid-{fld.Key}-{row}")" value="@col" checked="@(GetGridRadioValue(fld.Key, row) == col)" @onchange="e => OnGridRadioChanged(fld.Key, row, col)" />
+                                                }
+                                                else
+                                                {
+                                                    <input type="checkbox" checked="@IsGridCheckboxChecked(fld.Key, row, col)" @onchange="e => OnGridCheckboxChanged(fld.Key, row, col, e)" />
+                                                }
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        break;
+
+                    case "grid_text":
+                        var textOpts = JsonSerializer.Deserialize<GridOptions>(fld.OptionsJson ?? "{}");
+                        var textCols = textOpts?.Columns ?? new List<string>();
+                        var textRows = GetGridTextRows(fld.Key, textCols);
+                        <table class="table table-bordered table-sm">
+                            <thead>
+                                <tr>
+                                    @foreach (var col in textCols)
+                                    {
+                                        <th>@col</th>
+                                    }
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var (row, rIdx) in textRows.Select((r, i) => (r, i)))
+                                {
+                                    <tr>
+                                        @foreach (var col in textCols)
+                                        {
+                                            <td><input class="form-control" value="@row[col]" @onchange="e => OnGridTextChanged(fld.Key, rIdx, col, e)" /></td>
+                                        }
+                                        <td><button type="button" class="btn btn-sm btn-danger" @onclick="() => RemoveGridTextRow(fld.Key, rIdx)">Delete</button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AddGridTextRow(fld.Key, textCols)">+ Add Row</button>
+                        break;
+
+                    case "file":
+                        <InputFile OnChange="e => OnFileUploadChanged(fld.Key, e)" />
+                        @if (responseData.ContainsKey(fld.Key))
+                        {
+                            <div class="form-text">Uploaded: @responseData[fld.Key]</div>
+                        }
+                        break;
+                    case "image":
+                        @if (!string.IsNullOrWhiteSpace(fld.ImageUrl))
+                        {
+                            <img src="/@fld.ImageUrl" style="@GetImageStyle(fld)" />
+                        }
+                        break;
+                    case "statictext":
+                        <p>@fld.Label</p>
+                        break;
+
+                    case "title":
+                        <h4>@fld.Label</h4>
+                        break;
+
+                    case "section":
+                        <hr />
+                        @if (!string.IsNullOrWhiteSpace(fld.Label))
+                        {
+                            <h5>@fld.Label</h5>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(GetInstructions(fld)))
+                        {
+                            <p class="text-muted">@GetInstructions(fld)</p>
+                        }
+                        break;
+
+                    case "scale":
+                        var scaleOptions = Enumerable.Range(1, 5); // or use fld.OptionsJson for custom range
+                        <div class="d-flex align-items-center gap-3">
+                            @foreach (var num in scaleOptions)
+                            {
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio"
+                                           name="@fld.Key"
+                                           value="@num"
+                                           checked="@(GetString(fld.Key) == num.ToString())"
+                                           @onchange="e => OnTextChanged(fld.Key, e)" />
+                                    <label class="form-check-label">@num</label>
+                                </div>
+                            }
+                        </div>
+                        break;
+
+
+                    default:
+                        <input type="text" class="form-control"
+                               value="@GetString(fld.Key)"
+                               @onchange="e => OnTextChanged(fld.Key, e)" />
+                        break;
+                }
+                    </div>
+                </div>
+            }
+            </div>
+        }
+
+        <button class="btn btn-success" @onclick="SubmitResponse">Submit</button>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int FormId { get; set; }
+
+    private Form form;
+    private Dictionary<string, object> responseData = new();
+    private List<UserModel> directoryUsers = new();
+    private List<string> departments = new();
+    private List<string> locations = new();
+    private string? statusMessage;
+    private DeletedFormInfo? unavailableInfo;
+
+    string GetImageStyle(FormField f) =>
+        $"max-width:100%;{(f.ImageWidth.HasValue ? $"width:{f.ImageWidth}px;" : string.Empty)}{(f.ImageHeight.HasValue ? $"height:{f.ImageHeight}px;" : string.Empty)}";
+
+    string FormatUserOption(UserModel u)
+    {
+        var parts = new List<string> { u.DisplayName };
+        if (!string.IsNullOrWhiteSpace(u.Department)) parts.Add(u.Department);
+        if (!string.IsNullOrWhiteSpace(u.Location)) parts.Add(u.Location);
+        return string.Join(" - ", parts);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var resp = await Http.GetAsync($"api/forms/{FormId}");
+            if (!resp.IsSuccessStatusCode)
+            {
+                if (resp.StatusCode == HttpStatusCode.Gone)
+                {
+                    unavailableInfo = await resp.Content.ReadFromJsonAsync<DeletedFormInfo>();
+                }
+                else
+                {
+                    statusMessage = "Form not found.";
+                }
+                StateHasChanged();
+                return;
+            }
+
+            form = await resp.Content.ReadFromJsonAsync<Form>();
+
+            if (form.Fields.Any(f => f.FieldType == "user"))
+            {
+                directoryUsers = await UserService.GetAllUsers();
+            }
+            if (form.Fields.Any(f => f.FieldType == "department"))
+            {
+                departments = await UserService.GetDepartments();
+            }
+            if (form.Fields.Any(f => f.FieldType == "location"))
+            {
+                locations = await UserService.GetLocations();
+            }
+
+            var user = await CookieHelper.LoginStatus();
+            UserModel? currentUser = null;
+            if (!string.IsNullOrEmpty(user))
+            {
+                currentUser = await UserService.GetUserData(user);
+            }
+            if (form.RequireLogin && string.IsNullOrEmpty(user))
+            {
+                var ret = Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri));
+                Navigation.NavigateTo($"login?returnUrl={ret}", true);
+                return;
+            }
+
+            form.Fields = FilterFieldsBySectionVisibility(form.Fields, currentUser);
+
+            foreach (var fld in form.Fields)
+            {
+                if (fld.FieldType == "section" || fld.FieldType == "title" || fld.FieldType == "image" || fld.FieldType == "statictext")
+                {
+                    continue;
+                }
+
+                responseData[fld.Key] = fld.FieldType switch
+                {
+                    "checkbox" => new List<string>(),
+                    "grid_radio" => new Dictionary<string, string>(),
+                    "grid_checkbox" => new Dictionary<string, List<string>>(),
+                    "grid_text" => new List<Dictionary<string, string>>(),
+                    "number" => (object?)null,
+                    "date" => (object?)null,
+                    "time" => (object?)null,
+                    "datetime" => (object?)null,
+                    "file" => "",
+                    _ => string.Empty
+                };
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    string GetString(string key) => responseData[key]?.ToString() ?? "";
+    string GetNumberString(string key) => responseData[key] is double d ? d.ToString() : "";
+    string GetDateString(string key) => responseData[key] is DateTime dt ? dt.ToString("yyyy-MM-dd") : "";
+    string GetTimeString(string key) => responseData[key] is TimeSpan ts ? ts.ToString(@"hh\:mm") : "";
+    string GetDateTimeString(string key) => responseData[key] is DateTime dt ? dt.ToString("yyyy-MM-ddTHH:mm") : "";
+
+    string? GetInstructions(FormField field)
+    {
+        if (string.IsNullOrWhiteSpace(field.OptionsJson))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(field.OptionsJson);
+            if (doc.RootElement.TryGetProperty("Instructions", out var instEl))
+                return instEl.GetString();
+        }
+        catch { }
+        return null;
+    }
+
+    List<FormField> FilterFieldsBySectionVisibility(IEnumerable<FormField> fields, UserModel? user)
+    {
+        if (user == null) return fields.ToList();
+        var ordered = fields.OrderBy(f => f.Row ?? 0).ThenBy(f => f.Column ?? 0).ToList();
+        var result = new List<FormField>();
+        bool sectionVisible = true;
+        foreach (var fld in ordered)
+        {
+            if (fld.FieldType == "section")
+            {
+                sectionVisible = IsSectionVisible(fld, user);
+                if (sectionVisible)
+                    result.Add(fld);
+                continue;
+            }
+            if (sectionVisible)
+                result.Add(fld);
+        }
+        return result;
+    }
+
+    bool IsSectionVisible(FormField sectionField, UserModel user)
+    {
+        if (string.IsNullOrWhiteSpace(sectionField.OptionsJson))
+            return true;
+        try
+        {
+            using var doc = JsonDocument.Parse(sectionField.OptionsJson);
+            if (doc.RootElement.TryGetProperty("Departments", out var depEl) && depEl.ValueKind == JsonValueKind.Array)
+            {
+                var deps = depEl.EnumerateArray().Select(e => e.GetString()).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+                if (deps.Count > 0 && !deps.Any(d => string.Equals(d, user.Department, StringComparison.OrdinalIgnoreCase)))
+                    return false;
+            }
+            if (doc.RootElement.TryGetProperty("Locations", out var locEl) && locEl.ValueKind == JsonValueKind.Array)
+            {
+                var locs = locEl.EnumerateArray().Select(e => e.GetString()).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+                if (locs.Count > 0 && !locs.Any(l => string.Equals(l, user.Location, StringComparison.OrdinalIgnoreCase)))
+                    return false;
+            }
+        }
+        catch { }
+        return true;
+    }
+
+    void OnTextChanged(string key, ChangeEventArgs e) =>
+        responseData[key] = e.Value?.ToString() ?? "";
+
+    void OnNumberChanged(string key, ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var d))
+            responseData[key] = d;
+        else
+            responseData[key] = null;
+    }
+
+    void OnDateChanged(string key, ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+            responseData[key] = dt.Date;
+        else
+            responseData[key] = null;
+    }
+
+    void OnTimeChanged(string key, ChangeEventArgs e)
+    {
+        if (TimeSpan.TryParse(e.Value?.ToString(), out var ts))
+            responseData[key] = ts;
+        else
+            responseData[key] = null;
+    }
+
+    void OnDateTimeChanged(string key, ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+            responseData[key] = dt;
+        else
+            responseData[key] = null;
+    }
+
+    string? GetGridRadioValue(string key, string row)
+    {
+        if (responseData.TryGetValue(key, out var val) && val is Dictionary<string, string> dict && dict.TryGetValue(row, out var sel))
+            return sel;
+        return null;
+    }
+
+    void OnGridRadioChanged(string key, string row, string col)
+    {
+        if (!responseData.TryGetValue(key, out var val) || val is not Dictionary<string, string> dict)
+        {
+            dict = new();
+            responseData[key] = dict;
+        }
+        dict[row] = col;
+    }
+
+    bool IsGridCheckboxChecked(string key, string row, string col)
+    {
+        if (responseData.TryGetValue(key, out var val) && val is Dictionary<string, List<string>> dict && dict.TryGetValue(row, out var list))
+            return list.Contains(col);
+        return false;
+    }
+
+    void OnGridCheckboxChanged(string key, string row, string col, ChangeEventArgs e)
+    {
+        if (!responseData.TryGetValue(key, out var val) || val is not Dictionary<string, List<string>> dict)
+        {
+            dict = new();
+            responseData[key] = dict;
+        }
+        if (!dict.TryGetValue(row, out var list))
+        {
+            list = new();
+            dict[row] = list;
+        }
+        if ((bool?)e.Value == true)
+        {
+            if (!list.Contains(col))
+                list.Add(col);
+        }
+        else
+        {
+            list.Remove(col);
+        }
+    }
+
+    List<Dictionary<string, string>> GetGridTextRows(string key, List<string> cols)
+    {
+        if (!responseData.TryGetValue(key, out var val) || val is not List<Dictionary<string, string>> rows)
+        {
+            rows = new List<Dictionary<string, string>>();
+            responseData[key] = rows;
+        }
+        if (rows.Count == 0)
+            rows.Add(cols.ToDictionary(c => c, c => string.Empty));
+        return rows;
+    }
+
+    void AddGridTextRow(string key, List<string> cols)
+    {
+        var rows = GetGridTextRows(key, cols);
+        rows.Add(cols.ToDictionary(c => c, c => string.Empty));
+    }
+
+    void RemoveGridTextRow(string key, int index)
+    {
+        if (responseData.TryGetValue(key, out var val) && val is List<Dictionary<string, string>> rows && index >= 0 && index < rows.Count)
+            rows.RemoveAt(index);
+    }
+
+    void OnGridTextChanged(string key, int rowIndex, string col, ChangeEventArgs e)
+    {
+        if (responseData.TryGetValue(key, out var val) && val is List<Dictionary<string, string>> rows && rowIndex >= 0 && rowIndex < rows.Count)
+            rows[rowIndex][col] = e.Value?.ToString() ?? string.Empty;
+    }
+
+    void OnCheckboxChanged(string key, string option, ChangeEventArgs e)
+    {
+        if (!responseData.TryGetValue(key, out var existing) || existing is not List<string> list)
+        {
+            list = new List<string>();
+            responseData[key] = list;
+        }
+
+        if ((bool?)e.Value == true)
+        {
+            if (!list.Contains(option))
+                list.Add(option);
+        }
+        else
+        {
+            list.Remove(option);
+        }
+    }
+
+    private async Task OnFileUploadChanged(string key, InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        const long maxSize = 5 * 1024 * 1024;
+        if (file.Size > maxSize)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "File too large",
+                Detail = "Files must be 5 MB or smaller."
+            });
+            return;
+        }
+
+        var content = new MultipartFormDataContent();
+        var stream = file.OpenReadStream(maxAllowedSize: maxSize);
+        content.Add(new StreamContent(stream), "file", file.Name);
+
+        var response = await Http.PostAsync("api/FileUpload", content);
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<FileUploadResult>();
+            responseData[key] = result?.filePath ?? "upload-failed";
+        }
+        else
+        {
+            responseData[key] = "upload-failed";
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Upload failed",
+                Detail = "Unable to upload file."
+            });
+        }
+    }
+
+    private async Task SubmitResponse()
+    {
+        foreach (var fld in form.Fields)
+        {
+            if (fld.FieldType == "section" || fld.FieldType == "title" || fld.FieldType == "image" || fld.FieldType == "statictext")
+                continue;
+
+            if (fld.FieldType == "text" || fld.FieldType == "textarea")
+            {
+                if (responseData.TryGetValue(fld.Key, out var valObj) && valObj is string s)
+                {
+                    if (fld.MinCharLimit.HasValue && s.Length < fld.MinCharLimit.Value)
+                    {
+                        NotificationService.Notify(new NotificationMessage
+                        {
+                            Severity = NotificationSeverity.Warning,
+                            Summary = "Character limit",
+                            Detail = $"'{fld.Label}' requires at least {fld.MinCharLimit} characters (currently {s.Length}).",
+                        });
+                        return;
+                    }
+
+                    if (fld.CharLimit.HasValue && s.Length > fld.CharLimit.Value)
+                    {
+                        NotificationService.Notify(new NotificationMessage
+                        {
+                            Severity = NotificationSeverity.Warning,
+                            Summary = "Character limit",
+                            Detail = $"'{fld.Label}' allows {fld.CharLimit} characters (currently {s.Length}).",
+                        });
+                        return;
+                    }
+                }
+            }
+
+            if (fld.IsRequired && (!responseData.TryGetValue(fld.Key, out var val) || IsEmpty(val)))
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Warning,
+                    Summary = "Missing answer",
+                    Detail = $"Please fill out '{fld.Label}'.",
+                });
+                return;
+            }
+        }
+
+        var submitData = responseData
+            .Where(kv =>
+                form.Fields.Any(f =>
+                    f.Key.Equals(kv.Key, StringComparison.OrdinalIgnoreCase) &&
+                    f.FieldType != "section" &&
+                    f.FieldType != "title" &&
+                    f.FieldType != "image" &&
+                    f.FieldType != "statictext"))
+            .ToDictionary(k => k.Key, v => v.Value);
+
+        await Http.PostAsJsonAsync($"api/forms/{FormId}/responses", submitData);
+
+        Navigation.NavigateTo($"/forms/{FormId}/submitted", true);
+    }
+
+    bool IsEmpty(object value)
+    {
+        if (value == null) return true;
+        if (value is string s) return string.IsNullOrWhiteSpace(s);
+        if (value is IEnumerable<string> list) return !list.Any();
+        if (value is Dictionary<string, string> dr) return dr.Count == 0 || dr.Values.All(string.IsNullOrWhiteSpace);
+        if (value is Dictionary<string, List<string>> dc) return dc.Count == 0 || dc.Values.All(v => v == null || !v.Any());
+        if (value is List<Dictionary<string, string>> tl) return tl.Count == 0 || tl.All(r => r.Values.All(string.IsNullOrWhiteSpace));
+        return false;
+    }
+
+    private class FileUploadResult
+    {
+        public string filePath { get; set; }
+    }
+
+    private class GridOptions
+    {
+        public List<string>? Rows { get; set; }
+        public List<string>? Columns { get; set; }
+    }
+}

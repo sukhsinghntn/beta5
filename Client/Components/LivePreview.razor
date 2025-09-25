@@ -1,0 +1,180 @@
+@using DynamicFormsApp.Shared
+
+<h5 class="text-muted">Live Preview</h5>
+@if (!string.IsNullOrWhiteSpace(FormName))
+{
+    <h3 class="mb-3">@FormName</h3>
+}
+
+@foreach (var section in Sections)
+{
+    <div class="mb-4">
+        <hr />
+        @if (!string.IsNullOrWhiteSpace(section.Title))
+        {
+            <h5>@(section.Title)</h5>
+        }
+        @if (!string.IsNullOrWhiteSpace(section.Instructions))
+        {
+            <p class="text-muted">@(section.Instructions)</p>
+        }
+        @foreach (var row in section.Rows)
+        {
+            <div class="row g-3 mb-3">
+            @foreach (var field in row.Fields)
+            {
+                <div class="col-12 col-md-@(12 / (row.Fields.Count == 0 ? 1 : row.Fields.Count)) mb-3">
+                    @if (field.FieldType != "title" && field.FieldType != "section" && field.FieldType != "image" && field.FieldType != "statictext")
+                    {
+                        <label class="form-label">@field.Label</label>
+                    }
+                    @switch (field.FieldType)
+                    {
+                        case "text":
+                            <input class="form-control" placeholder="@(!string.IsNullOrWhiteSpace(field.Placeholder) ? field.Placeholder : "Short answer")" maxlength="@field.CharLimit" minlength="@field.MinCharLimit" />
+                            break;
+        
+                        case "textarea":
+                            <textarea class="form-control" placeholder="@(!string.IsNullOrWhiteSpace(field.Placeholder) ? field.Placeholder : "Paragraph")" maxlength="@field.CharLimit" minlength="@field.MinCharLimit"></textarea>
+                            break;
+                        case "radio":
+                            @foreach (var opt in field.OptionItems)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="@field.Key" />
+                                    <label class="form-check-label">@opt</label>
+                                </div>
+                            }
+                            break;
+                        case "checkbox":
+                            @foreach (var opt in field.OptionItems)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" />
+                                    <label class="form-check-label">@opt</label>
+                                </div>
+                            }
+                            break;
+                        case "dropdown":
+                            <select class="form-select">
+                                <option>@(!string.IsNullOrWhiteSpace(field.Placeholder) ? field.Placeholder : "Select one from dropdown")</option>
+                                @foreach (var opt in field.OptionItems)
+                                {
+                                    <option>@opt</option>
+                                }
+                            </select>
+                            break;
+                        case "user":
+                            <select class="form-select">
+                                <option>Select user</option>
+                            </select>
+                            break;
+                        case "department":
+                            <select class="form-select">
+                                <option>Select department</option>
+                            </select>
+                            break;
+                        case "location":
+                            <select class="form-select">
+                                <option>Select location</option>
+                            </select>
+                            break;
+                        case "scale":
+                            <div class="d-flex align-items-center gap-3">
+                                @for (int i = field.ScaleMin; i <= field.ScaleMax; i++)
+                                {
+                                    <div class="form-check">
+                                        <input type="radio" class="form-check-input" name="scale-@field.Key" />
+                                        <label class="form-check-label">@i</label>
+                                    </div>
+                                }
+                            </div>
+                            break;
+                        case "grid_radio":
+                        case "grid_checkbox":
+                            <table class="table table-bordered table-sm">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        @foreach (var col in field.GridColumns)
+                                        {
+                                            <th>@col</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var gridRow in field.GridRows)
+                                    {
+                                        <tr>
+                                            <td><strong>@gridRow</strong></td>
+                                            @foreach (var col in field.GridColumns)
+                                            {
+                                                <td>
+                                                    @if (field.FieldType == "grid_radio")
+                                                    {
+                                                        <input type="radio" name="@($"grid-{field.Key}-{gridRow}")" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <input type="checkbox" />
+                                                    }
+                                                </td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            break;
+                        case "grid_text":
+                            <table class="table table-bordered table-sm">
+                                <thead>
+                                    <tr>
+                                        @foreach (var col in field.GridColumns)
+                                        {
+                                            <th>@col</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        @foreach (var col in field.GridColumns)
+                                        {
+                                            <td><input class="form-control" /></td>
+                                        }
+                                    </tr>
+                                </tbody>
+                            </table>
+                            break;
+                        case "file":
+                            <input type="file" class="form-control" />
+                            break;
+                        case "image":
+                            @if (!string.IsNullOrWhiteSpace(field.ImageUrl))
+                            {
+                                <img src="/@field.ImageUrl" style="@GetImageStyle(field)" />
+                            }
+                            break;
+                        case "statictext":
+                            <p>@field.Label</p>
+                            break;
+                        case "title":
+                            <h4 class="text-muted">@field.Label</h4>
+                            break;
+                        default:
+                            <input class="form-control" />
+                            break;
+                    }
+                </div>
+            }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<DesignerSection> Sections { get; set; } = new();
+    [Parameter] public string? FormName { get; set; }
+
+    string GetImageStyle(DesignerField f) =>
+        $"max-width:100%;{(f.ImageWidth.HasValue ? $"width:{f.ImageWidth}px;" : string.Empty)}{(f.ImageHeight.HasValue ? $"height:{f.ImageHeight}px;" : string.Empty)}";
+}
