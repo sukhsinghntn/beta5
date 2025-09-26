@@ -1,0 +1,53 @@
+.tour-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1080;
+    pointer-events: none;
+}
+
+.tour-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(2px);
+    pointer-events: auto;
+}
+
+.tour-card {
+    position: absolute;
+    right: 2rem;
+    bottom: 2rem;
+    max-width: 360px;
+    background: rgba(17, 24, 39, 0.95);
+    color: #f8fafc;
+    border-radius: 16px;
+    padding: 1.5rem;
+    pointer-events: auto;
+}
+
+.tour-card h5 {
+    font-weight: 600;
+}
+
+.tour-card p {
+    margin-bottom: 0;
+}
+
+.tour-card .btn-outline-light {
+    --bs-btn-color: #f8fafc;
+    --bs-btn-border-color: rgba(248, 250, 252, 0.45);
+    --bs-btn-hover-color: #0d6efd;
+    --bs-btn-hover-bg: #f8fafc;
+    --bs-btn-hover-border-color: #f8fafc;
+    --bs-btn-active-bg: #f8fafc;
+    --bs-btn-active-color: #0d6efd;
+}
+
+@media (max-width: 576px) {
+    .tour-card {
+        left: 1rem;
+        right: 1rem;
+        bottom: 1.5rem;
+        max-width: unset;
+    }
+}

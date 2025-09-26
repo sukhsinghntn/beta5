@@ -30,3 +30,13 @@ h1:focus {
     .blazor-error-boundary::after {
         content: "An error has occurred."
     }
+
+.tour-highlight {
+    z-index: 1100 !important;
+    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.35), 0 12px 30px rgba(13, 110, 253, 0.35);
+    border-radius: 12px;
+    transition: box-shadow 0.2s ease;
+    outline: 2px solid rgba(255, 255, 255, 0.35);
+    outline-offset: 6px;
+}
+

@@ -21,10 +21,13 @@
 
 @if (!isPreviewMode)
 {
-    <h2 class="mb-2">Form Builder</h2>
-    <p class="text-muted">Drag fields to reorder or move them between rows. Each row can have up to four columns.</p>
-    <div class="row">
-        <div class="col-md-3" style="position:sticky;top:75px;max-height:calc(100vh - 90px);overflow-y:auto;">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <h2 class="mb-0" id="builder-heading">Form Builder</h2>
+        <button class="btn btn-outline-primary btn-sm ms-auto" @onclick="ShowBuilderTour">Take a tour</button>
+    </div>
+    <p class="text-muted small" id="builder-help">Drag fields to reorder or move them between rows. Each row can have up to four columns.</p>
+    <div class="row g-3 form-builder-layout" id="builder-layout">
+        <div class="col-md-3" id="builder-toolbox" style="position:sticky;top:75px;max-height:calc(100vh - 90px);overflow-y:auto;">
             <div class="mb-3 d-flex align-items-center gap-2">
                 <h5 class="mb-0">Toolbox</h5>
                 <div class="ms-auto d-flex gap-2">
@@ -197,9 +200,9 @@
                 </div>
             }
         </div>
-        <div class="col-md-9">
+        <div class="col-md-9" id="builder-canvas">
             <div class="mb-2">
-                <input class="form-control form-control-sm" placeholder="Untitled form" @bind="formName" />
+                <input class="form-control form-control-sm" id="form-name-input" placeholder="Untitled form" @bind="formName" />
             </div>
             <div class="mb-2">
                 <textarea class="form-control form-control-sm" placeholder="Form description" @bind="formDescription"></textarea>
@@ -223,7 +226,7 @@
                 @for (int s = 0; s < sections.Count; s++)
                 {
                     var secIndex = s;
-                    <div class="section-wrapper mb-4" data-section="@secIndex" id="section-@secIndex" @key="sections[secIndex]">
+                    <div class="section-wrapper mb-3" data-section="@secIndex" id="section-@secIndex" @key="sections[secIndex]">
                         <div class="card">
                             <div class="card-header">
                                 <div class="d-flex align-items-center gap-2">
@@ -298,6 +301,11 @@
             </div>
         </div>
     </div>
+
+    <TourOverlay @ref="builderTour"
+                 Steps="builderTourSteps"
+                 StartAutomatically="true"
+                 StorageKey="@BuilderTourStorageKey" />
 }
 else
 {
@@ -312,6 +320,15 @@ else
 }
 
 @code {
+    private const string BuilderTourStorageKey = "tour:builder:v1";
+    private TourOverlay? builderTour;
+    private readonly IReadOnlyList<TourStep> builderTourSteps = new List<TourStep>
+    {
+        new("Grab fields from the toolbox", "Drag any field into your form canvas or rearrange existing ones.", "builder-toolbox"),
+        new("Name your form", "Give your form a clear title and optional description so collaborators know what it's for.", "form-name-input"),
+        new("Organize sections", "Add sections, rows, and columns here to build out the structure of your form.", "sections-container")
+    };
+
     private string formName = string.Empty;
     private string formDescription = string.Empty;
     private List<DesignerSection> sections = new() { new DesignerSection() };
@@ -329,6 +346,14 @@ else
 
     private Stack<List<DesignerSection>> undoStack = new();
     private Stack<List<DesignerSection>> redoStack = new();
+
+    private async Task ShowBuilderTour()
+    {
+        if (builderTour is not null)
+        {
+            await builderTour.StartAsync();
+        }
+    }
 
     List<DesignerSection> CloneSections(List<DesignerSection> src) =>
         JsonSerializer.Deserialize<List<DesignerSection>>(JsonSerializer.Serialize(src)) ?? new();
